@@ -2,6 +2,9 @@ import User from '../models/User.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// ✅ Register
 export const register = async (req, res) => {
     try {
         const { name, email, password } = req.body;
@@ -16,12 +19,23 @@ export const register = async (req, res) => {
         const newUser = new User({ name, email, password: hashedPassword });
         await newUser.save();
 
-        res.status(201).json({ message: 'User registered successfully' });
+        const token = jwt.sign(
+            { id: newUser._id, name: newUser.name, email: newUser.email },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.status(201).json({
+            message: 'User registered successfully',
+            token,
+            user: { id: newUser._id, name: newUser.name, email: newUser.email }
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 };
 
+// ✅ Login
 export const login = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -36,12 +50,40 @@ export const login = async (req, res) => {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+        const token = jwt.sign(
+            { id: user._id, name: user.name, email: user.email },
+            JWT_SECRET,
+            { expiresIn: '7d' }
+        );
 
-        res.status(200).json({ 
+        res.status(200).json({
             message: 'Login successful',
-            token, 
+            token,
             user: { id: user._id, name: user.name, email: user.email }
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// ✅ Verify Token
+export const verify = async (req, res) => {
+    try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ message: 'No token provided' });
+        }
+
+        const token = authHeader.split(' ')[1];
+
+        jwt.verify(token, JWT_SECRET, (err, decoded) => {
+            if (err) {
+                return res.status(401).json({ message: 'Invalid or expired token' });
+            }
+
+            res.status(200).json({
+                user: { id: decoded.id, name: decoded.name, email: decoded.email }
+            });
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
